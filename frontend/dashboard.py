@@ -161,7 +161,7 @@ def main():
                         "status": "Status",
                         "total_posts": "Posts"
                     },
-                    use_container_width=True
+                    width="stretch"   # ✅ updated
                 )
 
                 selected_campaign = st.selectbox("Select Campaign", df_campaigns["name"])
@@ -185,7 +185,7 @@ def main():
                 "Status": ["Active", "Monitoring", "Inactive"]
             }
             df_bots = pd.DataFrame(bot_data)
-            st.dataframe(df_bots, use_container_width=True)
+            st.dataframe(df_bots, width="stretch")   # ✅ updated
             fig_bot = px.scatter(
                 df_bots,
                 x="Accounts",
@@ -195,7 +195,7 @@ def main():
                 hover_name="Network",
                 title="Bot Network Activity vs Size"
             )
-            st.plotly_chart(fig_bot, use_container_width=True)
+            st.plotly_chart(fig_bot, width="stretch")   # ✅ updated
 
         # Analytics tab
         with tab3:
@@ -214,7 +214,7 @@ def main():
                 color_discrete_sequence=["#43c6ac"]
             )
             fig_temporal.update_layout(plot_bgcolor='#f8ffae', paper_bgcolor='#f8ffae')
-            st.plotly_chart(fig_temporal, use_container_width=True)
+            st.plotly_chart(fig_temporal, width="stretch")   # ✅ updated
 
         # Analysis Tools tab
         with tab4:
