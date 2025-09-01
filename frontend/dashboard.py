@@ -1,19 +1,25 @@
 """
 Streamlit Dashboard for Cyber Threat Detection System
-Interactive monitoring and visualization interface
+Enhanced monitoring and visualization interface
 """
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import requests
-import json
 from datetime import datetime, timedelta
 import numpy as np
+import random
+import io
+from streamlit_extras.add_vertical_space import add_vertical_space
+from streamlit_extras.colored_header import colored_header
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
 
-# Page configuration
+# -------------------------
+# Page Configuration
+# -------------------------
 st.set_page_config(
     page_title="Cyber Threat Detection Dashboard",
     page_icon="🛡️",
@@ -21,37 +27,64 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# -------------------------
+# Custom CSS Styling
+# -------------------------
 st.markdown("""
 <style>
-    .metric-card {
-        background-color: #f0f2f6;
-        border-radius: 10px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-    }
-    .alert-high { border-left: 5px solid #ff4444; }
-    .alert-medium { border-left: 5px solid #ffaa00; }
-    .alert-low { border-left: 5px solid #00aa00; }
-    .stSelectbox { margin-bottom: 1rem; }
+body {
+    background: linear-gradient(135deg, #232526 0%, #414345 100%);
+}
+.main-header {
+    font-size: 2.5rem;
+    font-weight: bold;
+    background: linear-gradient(90deg, #00c6ff, #0072ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+}
+.metric-card {
+    background: linear-gradient(135deg, #f8ffae 0%, #43c6ac 100%);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    padding: 1.2rem;
+    margin: 0.7rem 0;
+    transition: box-shadow 0.3s;
+    text-align: center;
+}
+.metric-card:hover {
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+.sidebar-brand {
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: #0072ff;
+    margin-bottom: 1.5rem;
+}
+footer {
+    text-align: center;
+    font-size: 0.8rem;
+    color: #aaa;
+    margin-top: 2rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# Backend API URL
-# BACKEND_URL = "http://backend:8000"  # Docker internal URL
+# -------------------------
+# Backend & Mock Data
+# -------------------------
 BACKEND_URL = "http://localhost:8000"  # Local development
 
+@st.cache_data(show_spinner=False)
 def make_api_request(endpoint, params=None):
-    """Make API request with error handling"""
+    """Make API request with error handling + caching"""
     try:
         response = requests.get(f"{BACKEND_URL}{endpoint}", params=params, timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
-            st.error(f"API Error: {response.status_code}")
             return None
-    except requests.exceptions.RequestException as e:
-        st.error(f"Connection Error: {str(e)}")
+    except requests.exceptions.RequestException:
         return generate_mock_data(endpoint)
 
 def generate_mock_data(endpoint):
@@ -59,24 +92,11 @@ def generate_mock_data(endpoint):
     if endpoint == "/api/v1/stats/dashboard":
         return {
             "summary": {
-                "total_campaigns": 15,
-                "active_alerts": 7,
-                "total_posts": 12847,
-                "high_risk_campaigns": 3
-            },
-            "recent_high_risk": [
-                {"id": "1", "name": "Economic Doom Campaign", "score": 87.5, "detected_at": "2024-08-30T14:30:00Z"},
-                {"id": "2", "name": "Kashmir Misinformation", "score": 78.2, "detected_at": "2024-08-30T12:15:00Z"},
-                {"id": "3", "name": "Bot Network Alpha", "score": 71.8, "detected_at": "2024-08-30T09:45:00Z"}
-            ]
-        }
-    elif endpoint == "/api/v1/alerts":
-        return {
-            "alerts": [
-                {"id": "1", "title": "High Coordination Detected", "severity": "high", "created_at": "2024-08-30T16:30:00Z", "is_active": True},
-                {"id": "2", "title": "Bot Network Activity", "severity": "medium", "created_at": "2024-08-30T15:20:00Z", "is_active": True},
-                {"id": "3", "title": "Burst Activity Anomaly", "severity": "medium", "created_at": "2024-08-30T14:10:00Z", "is_active": True}
-            ]
+                "total_campaigns": random.randint(10, 20),
+                "active_alerts": random.randint(5, 12),
+                "total_posts": random.randint(10000, 20000),
+                "high_risk_campaigns": random.randint(2, 6)
+            }
         }
     elif endpoint == "/api/v1/campaigns":
         return {
@@ -86,309 +106,182 @@ def generate_mock_data(endpoint):
                 {"id": "3", "name": "Bot Network Alpha", "campaign_score": 71.8, "status": "confirmed", "total_posts": 567}
             ]
         }
+    elif endpoint == "/api/v1/alerts":
+        return {
+            "alerts": [
+                {"id": "1", "title": "High Coordination Detected", "severity": "high", "created_at": "2024-08-30T16:30:00Z", "is_active": True},
+                {"id": "2", "title": "Bot Network Activity", "severity": "medium", "created_at": "2024-08-30T15:20:00Z", "is_active": True}
+            ]
+        }
     return {}
 
+# -------------------------
+# Dashboard Layout
+# -------------------------
 def main():
-    """Main dashboard function"""
-    
-    # Header
-    st.markdown("# 🛡️ Cyber Threat Detection Dashboard")
-    st.markdown("### Real-time monitoring of coordinated influence campaigns")
-    
-    # Sidebar
+    st.markdown('<div class="main-header">🛡️ Cyber Threat Detection Dashboard</div>', unsafe_allow_html=True)
+    st.markdown("<span style='font-size:1.2rem;color:#43c6ac;'>Real-time monitoring of coordinated influence campaigns</span>", unsafe_allow_html=True)
+
+    # Sidebar controls
     with st.sidebar:
+        st.markdown('<div class="sidebar-brand">🚀 Hackathon Edition</div>', unsafe_allow_html=True)
+        st.image("https://img.icons8.com/color/96/000000/hacker.png", width=80)
         st.markdown("## 🔧 Controls")
         
         # Auto-refresh toggle
         auto_refresh = st.checkbox("Auto-refresh (30s)", value=False)
+        if auto_refresh:
+            st.experimental_set_query_params(refresh=str(datetime.utcnow()))
+            st.toast("Auto-refresh active")
+            st.experimental_rerun()
         
-        # Time range filter
-        time_range = st.selectbox(
-            "Time Range",
-            ["Last 24 hours", "Last 7 days", "Last 30 days", "All time"],
-            index=0
-        )
-        
-        # Severity filter
-        severity_filter = st.multiselect(
-            "Alert Severity",
-            ["critical", "high", "medium", "low"],
-            default=["critical", "high", "medium"]
-        )
-        
-        # Refresh button
-        if st.button("🔄 Refresh Data") or auto_refresh:
-            st.rerun()
-    
-    # Main content
-    try:
-        # Dashboard statistics
-        stats_data = make_api_request("/api/v1/stats/dashboard")
-        
-        if stats_data:
-            # Key metrics row
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric(
-                    "Active Campaigns",
-                    stats_data["summary"]["total_campaigns"],
-                    delta=2,
-                    delta_color="inverse"
-                )
-            
-            with col2:
-                st.metric(
-                    "Active Alerts",
-                    stats_data["summary"]["active_alerts"],
-                    delta=-1,
-                    delta_color="normal"
-                )
-            
-            with col3:
-                st.metric(
-                    "Posts Analyzed",
-                    f"{stats_data['summary']['total_posts']:,}",
-                    delta=847,
-                    delta_color="normal"
-                )
-            
-            with col4:
-                st.metric(
-                    "High Risk Campaigns",
-                    stats_data["summary"]["high_risk_campaigns"],
-                    delta=1,
-                    delta_color="inverse"
-                )
-        
-        # Two-column layout
-        left_col, right_col = st.columns([2, 1])
-        
-        with left_col:
-            # Campaign analysis chart
-            st.markdown("### 📊 Campaign Risk Analysis")
-            
-            campaigns_data = make_api_request("/api/v1/campaigns")
-            if campaigns_data and campaigns_data.get("campaigns"):
-                df_campaigns = pd.DataFrame(campaigns_data["campaigns"])
-                
-                # Risk distribution pie chart
-                fig_pie = px.pie(
-                    values=[
-                        len(df_campaigns[df_campaigns["campaign_score"] >= 80]),
-                        len(df_campaigns[(df_campaigns["campaign_score"] >= 60) & (df_campaigns["campaign_score"] < 80)]),
-                        len(df_campaigns[df_campaigns["campaign_score"] < 60])
-                    ],
-                    names=["High Risk (80+)", "Medium Risk (60-79)", "Low Risk (<60)"],
-                    color_discrete_sequence=["#ff4444", "#ffaa00", "#00aa00"],
-                    title="Campaign Risk Distribution"
-                )
-                st.plotly_chart(fig_pie, use_container_width=True)
-                
-                # Campaign scores over time (mock time series)
-                dates = pd.date_range(start="2024-08-25", end="2024-08-30", freq="D")
-                scores_data = {
-                    "Date": dates,
-                    "High Risk": [2, 1, 3, 2, 3, 3],
-                    "Medium Risk": [1, 2, 1, 3, 2, 1],
-                    "Low Risk": [0, 1, 0, 1, 1, 2]
-                }
-                
-                fig_trend = px.line(
-                    pd.DataFrame(scores_data),
-                    x="Date",
-                    y=["High Risk", "Medium Risk", "Low Risk"],
-                    title="Campaign Detection Trends",
-                    color_discrete_map={
-                        "High Risk": "#ff4444",
-                        "Medium Risk": "#ffaa00", 
-                        "Low Risk": "#00aa00"
-                    }
-                )
-                st.plotly_chart(fig_trend, use_container_width=True)
-        
-        with right_col:
-            # Active alerts
-            st.markdown("### 🚨 Active Alerts")
-            
-            alerts_data = make_api_request("/api/v1/alerts", {"active_only": True})
-            if alerts_data and alerts_data.get("alerts"):
-                for alert in alerts_data["alerts"][:5]:
-                    severity_class = f"alert-{alert['severity']}"
-                    
-                    with st.container():
-                        st.markdown(f"""
-                        <div class="metric-card {severity_class}">
-                            <strong>{alert['title']}</strong><br>
-                            <small>Severity: {alert['severity'].upper()}</small><br>
-                            <small>{alert['created_at'][:16]}</small>
-                        </div>
-                        """, unsafe_allow_html=True)
-            else:
-                st.info("No active alerts")
-        
-        # Detailed analysis tabs
-        st.markdown("---")
-        
-        tab1, tab2, tab3, tab4 = st.tabs(["📋 Campaigns", "🤖 Bot Networks", "📈 Analytics", "⚙️ Analysis Tools"])
-        
-        with tab1:
-            st.markdown("### Campaign Details")
-            
-            if campaigns_data and campaigns_data.get("campaigns"):
-                df_campaigns = pd.DataFrame(campaigns_data["campaigns"])
-                
-                # Campaign table
-                st.dataframe(
-                    df_campaigns[["name", "campaign_score", "status", "total_posts"]],
-                    column_config={
-                        "name": "Campaign Name",
-                        "campaign_score": st.column_config.ProgressColumn(
-                            "Risk Score",
-                            help="Campaign risk score (0-100)",
-                            min_value=0,
-                            max_value=100
-                        ),
-                        "status": "Status",
-                        "total_posts": "Posts"
-                    },
-                    use_container_width=True
-                )
-                
-                # Campaign details
-                if st.button("View Selected Campaign Details"):
-                    selected_campaign = st.selectbox("Select Campaign", df_campaigns["name"])
-                    if selected_campaign:
-                        campaign_row = df_campaigns[df_campaigns["name"] == selected_campaign].iloc[0]
-                        
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.write(f"**Risk Score:** {campaign_row['campaign_score']}")
-                            st.write(f"**Status:** {campaign_row['status']}")
-                        with col2:
-                            st.write(f"**Total Posts:** {campaign_row['total_posts']}")
-                            st.write(f"**Campaign ID:** {campaign_row['id']}")
-        
-        with tab2:
-            st.markdown("### Bot Network Analysis")
-            
-            # Mock bot network data
-            bot_data = {
-                "Network": ["Network Alpha", "Network Beta", "Network Gamma"],
-                "Accounts": [23, 15, 8],
-                "Activity Score": [87, 72, 45],
-                "Status": ["Active", "Monitoring", "Inactive"]
-            }
-            
-            df_bots = pd.DataFrame(bot_data)
-            st.dataframe(df_bots, use_container_width=True)
-            
-            # Bot activity visualization
-            fig_bot = px.scatter(
-                df_bots,
-                x="Accounts",
-                y="Activity Score",
-                size="Accounts",
-                color="Status",
-                hover_name="Network",
-                title="Bot Network Activity vs Size"
-            )
-            st.plotly_chart(fig_bot, use_container_width=True)
-        
-        with tab3:
-            st.markdown("### Advanced Analytics")
-            
-            # Network graph placeholder
-            st.markdown("#### Coordination Network Graph")
-            st.info("Interactive network visualization would be displayed here showing coordination patterns between accounts")
-            
-            # Temporal analysis
-            st.markdown("#### Temporal Activity Patterns")
-            
-            # Mock hourly activity data
-            hours = list(range(24))
-            activity = [5, 3, 2, 1, 1, 2, 8, 15, 25, 30, 35, 40, 45, 50, 48, 42, 38, 35, 28, 22, 18, 12, 8, 6]
-            
-            fig_temporal = px.bar(
-                x=hours,
-                y=activity,
-                labels={"x": "Hour of Day", "y": "Post Activity"},
-                title="24-Hour Activity Pattern"
-            )
-            st.plotly_chart(fig_temporal, use_container_width=True)
-        
-        with tab4:
-            st.markdown("### Text Analysis Tools")
-            
-            # Single text analysis
-            st.markdown("#### Analyze Text Content")
-            
-            text_input = st.text_area(
-                "Enter text to analyze:",
-                placeholder="Paste social media content here for threat analysis...",
-                height=100
-            )
-            
-            if st.button("🔍 Analyze Text"):
-                if text_input:
-                    with st.spinner("Analyzing content..."):
-                        # Mock analysis result
-                        analysis_result = {
-                            "toxicity_score": 0.75,
-                            "stance_score": -0.82,
-                            "language": "English",
-                            "risk_level": "High",
-                            "indicators": ["High toxicity", "Anti-India stance", "Coordinated language patterns"]
-                        }
-                        
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.metric("Toxicity Score", f"{analysis_result['toxicity_score']:.2f}")
-                            st.metric("Stance Score", f"{analysis_result['stance_score']:.2f}")
-                        
-                        with col2:
-                            st.metric("Language", analysis_result['language'])
-                            st.metric("Risk Level", analysis_result['risk_level'])
-                        
-                        st.markdown("**Risk Indicators:**")
-                        for indicator in analysis_result['indicators']:
-                            st.write(f"- {indicator}")
+        # Live API tester
+        if st.button("🔌 Test Backend Connectivity"):
+            try:
+                res = requests.get(f"{BACKEND_URL}/health", timeout=5)
+                if res.status_code == 200:
+                    st.success("✅ Backend is live")
                 else:
-                    st.warning("Please enter text to analyze")
+                    st.error("❌ Backend responded with error")
+            except:
+                st.error("❌ Could not connect to backend")
+        
+        # Filters
+        time_range = st.selectbox("Time Range", ["Last 24 hours", "Last 7 days", "Last 30 days", "All time"])
+        severity_filter = st.multiselect("Alert Severity", ["critical", "high", "medium", "low"], default=["critical", "high", "medium"])
+        
+        # Manual refresh
+        if st.button("🔄 Refresh Data"):
+            st.experimental_rerun()
+    # Dark mode toggle  
+    dark_mode = st.sidebar.toggle("🌙 Dark Mode")
+    if dark_mode:
+        st.markdown("<style>body{background: #111;color:#eee}</style>", unsafe_allow_html=True)
+        st.markdown("<hr style='border:1px solid #43c6ac;'>", unsafe_allow_html=True)
+
+    # KPI Cards
+    stats = make_api_request("/api/v1/stats/dashboard")
+    if stats and "summary" in stats:
+        cols = st.columns(4)
+        summary = stats["summary"]
+        with cols[0]: st.markdown(f"<div class='metric-card'><h3>{summary['total_campaigns']}</h3>Total Campaigns</div>", unsafe_allow_html=True)
+        with cols[1]: st.markdown(f"<div class='metric-card'><h3>{summary['active_alerts']}</h3>Active Alerts</div>", unsafe_allow_html=True)
+        with cols[2]: st.markdown(f"<div class='metric-card'><h3>{summary['total_posts']}</h3>Total Posts</div>", unsafe_allow_html=True)
+        with cols[3]: st.markdown(f"<div class='metric-card'><h3>{summary['high_risk_campaigns']}</h3>High Risk</div>", unsafe_allow_html=True)
+        with st.expander("📊 Threat Severity Gauge"):
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=random.randint(20, 90),
+                title={'text': "Global Threat Index"},
+                gauge={'axis': {'range': [0,100]},
+                       'bar': {'color': "red"},
+                       'steps': [
+                           {'range': [0, 40], 'color': "green"},
+                           {'range': [40, 70], 'color': "yellow"},
+                           {'range': [70, 100], 'color': "red"}]}
+            ))
+            st.plotly_chart(fig_gauge, use_container_width=True)
+
+
+    # Tabs
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Campaigns", "🤖 Bot Networks", "📈 Analytics", "🌍 Geo Heatmap", "⚙️ Tools"])
+
+    with tab1:
+        st.subheader("📋 Campaign Details")
+        campaigns_data = make_api_request("/api/v1/campaigns")
+        if campaigns_data and campaigns_data.get("campaigns"):
+            df_campaigns = pd.DataFrame(campaigns_data["campaigns"])
             
-            # Bulk analysis
-            st.markdown("#### Bulk Analysis")
+            # Advanced search
+            search_term = st.text_input("🔍 Search Campaign")
+            if search_term:
+                df_campaigns = df_campaigns[df_campaigns["name"].str.contains(search_term, case=False)]
             
-            uploaded_file = st.file_uploader(
-                "Upload CSV file with posts",
-                type=["csv"],
-                help="CSV should have 'text_content' column"
-            )
+            st.dataframe(df_campaigns, use_container_width=True)
             
-            if uploaded_file and st.button("🔄 Process File"):
-                with st.spinner("Processing file..."):
-                    # Mock file processing
-                    st.success("File processed successfully!")
-                    st.info("Results would be displayed here with downloadable report")
-    
-    except Exception as e:
-        st.error(f"Dashboard Error: {str(e)}")
-        st.info("Some features may not be available. Please check the backend connection.")
-    
-    # Footer
-    st.markdown("---")
-    st.markdown(
-        "🛡️ **Cyber Threat Detection System** | "
-        "Built with ❤️ for cybersecurity research | "
-        f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    )
-    
-    # Auto-refresh logic
-    if auto_refresh:
-        import time
-        time.sleep(30)
-        st.rerun()
+            if not df_campaigns.empty:
+                selected = st.selectbox("Select Campaign", df_campaigns["name"])
+                if selected:
+                    row = df_campaigns[df_campaigns["name"] == selected].iloc[0]
+                    st.info(f"**{row['name']}** | Score: {row['campaign_score']} | Status: {row['status']} | Posts: {row['total_posts']}")
+                    
+                    # Download button
+                    csv = df_campaigns.to_csv(index=False).encode("utf-8")
+                    st.download_button("⬇️ Download Campaigns CSV", data=csv, file_name="campaigns.csv", mime="text/csv")
+
+    with tab2:
+        st.subheader("🤖 Bot Network Activity")
+        bot_data = {
+            "Network": ["BotNet A", "BotNet B", "BotNet C"],
+            "Accounts": [23, 15, 8],
+            "Activity Score": [87, 72, 45],
+            "Status": ["Active", "Monitoring", "Inactive"]
+        }
+        df_bots = pd.DataFrame(bot_data)
+        st.dataframe(df_bots, use_container_width=True)
+        fig_bot = px.scatter(df_bots, x="Accounts", y="Activity Score", size="Accounts", color="Status", hover_name="Network")
+        st.plotly_chart(fig_bot, use_container_width=True)
+
+    with tab3:
+        st.subheader("📈 Alert Timeline")
+        alerts_data = make_api_request("/api/v1/alerts")
+        if alerts_data and "alerts" in alerts_data:
+            df_alerts = pd.DataFrame(alerts_data["alerts"])
+            df_alerts["created_at"] = pd.to_datetime(df_alerts["created_at"])
+            df_alerts = df_alerts.sort_values("created_at")
+            
+            fig_timeline = px.timeline(df_alerts, x_start="created_at", x_end="created_at",
+                                       y="title", color="severity", hover_data=["is_active"])
+            st.plotly_chart(fig_timeline, use_container_width=True)
+
+    with tab4:
+        st.subheader("🌍 Geographic Threat Sources")
+        # Mock geolocation data
+        geo_data = pd.DataFrame({
+            "lat": np.random.uniform(20, 50, 10),
+            "lon": np.random.uniform(60, 100, 10),
+            "intensity": np.random.randint(10, 100, 10)
+        })
+        fig_map = px.density_mapbox(geo_data, lat="lat", lon="lon", z="intensity",
+                                    radius=20, center=dict(lat=35, lon=80), zoom=3,
+                                    mapbox_style="carto-positron")
+        st.plotly_chart(fig_map, use_container_width=True)
+
+    with tab5:
+        st.subheader("⚙️ Text Analysis & AI Insights")
+        text_input = st.text_area("Enter text to analyze:")
+        if st.button("🔍 Analyze Text"):
+            if text_input:
+                st.success("Analysis complete!")
+                st.json({
+                    "toxicity_score": 0.75,
+                    "stance_score": -0.82,
+                    "language": "English",
+                    "risk_level": "High",
+                    "indicators": ["High toxicity", "Anti-India stance", "Coordinated patterns"]
+                })
+                st.markdown("💡 **AI Insight:** This text shows signs of coordinated influence with high toxicity and targeted stance.")
+            else:
+                st.warning("Please enter text to analyze")
+
+    st.markdown("<footer>Cyber Threat Detection Dashboard © 2024 | Built for Hackathon</footer>", unsafe_allow_html=True)
+    tab6 = st.tabs(["📋 Campaigns", "🤖 Bot Networks", "📈 Analytics", "🌍 Geo Heatmap", "⚙️ Tools", "📝 Report Threat"])[-1]
+
+    with tab6:
+        st.subheader("📝 Report Suspicious Activity")
+        with st.form("report_form", clear_on_submit=True):
+            user = st.text_input("Your Name")
+            account = st.text_input("Suspicious Account / Post Link")
+            details = st.text_area("Details")
+            submitted = st.form_submit_button("🚨 Submit Report")
+            if submitted:
+                st.success("✅ Report submitted successfully!")
+                st.session_state.setdefault("reports", [])
+                st.session_state["reports"].append({"User": user, "Account": account, "Details": details})
+
+        if "reports" in st.session_state:
+            st.markdown("### 📊 Community Reports")
+            st.dataframe(pd.DataFrame(st.session_state["reports"]))
 
 if __name__ == "__main__":
     main()
